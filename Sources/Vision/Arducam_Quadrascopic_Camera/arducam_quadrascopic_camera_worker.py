@@ -144,14 +144,12 @@ def run_camera(worker_object):
 
             gst_out = "appsrc ! video/x-raw, format=GRAY8 ! nvvidconv ! video/x-raw(memory:NVMM) ! \
                        omxh264enc ! h264parse ! matroskamux ! filesink location={}".format(save_file)
-            #gst_out = "appsrc ! video/x-raw, format=GRAY8 ! queue ! nvvidconv ! omxh264enc ! h264parse ! qtmux ! filesink location={} ".format(file_name)
             output_video = cv2.VideoWriter(gst_out, cv2.CAP_GSTREAMER, 0, file_fps, (width, height), False)
 
         # Before changing the v4l2 driver parameters first capture a frame (otherwise the changes do not stick)
         got_frame, frame = capture.read()
         if got_frame:
             change_camera_parameters(worker_object)
-            #os.system('v4l2-ctl -l')  # send the camera parameters to the stdout
         else:
             logging.error("Arducam didn't acquire the first frame correctly. Aborting")
             print("Arducam didn't acquire the first frame correctly. Aborting")
@@ -185,8 +183,7 @@ def run_camera(worker_object):
                     dst_width = sub_camera_scale * new_width
                     frame = resize(frame, dst_width)
 
-            #worker_object.worker_visualisable_result = frame
-            worker_object.socket_push_data.send_array(frame, copy=False)
+            worker_object.send_data_to_com(frame)
 
             total_frame_time = total_frame_time + (datetime.now() - start).total_seconds()
 
