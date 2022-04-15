@@ -155,6 +155,15 @@ def run_camera(worker_object):
             print("Arducam didn't acquire the first frame correctly. Aborting")
             return
 
+    # Create the parameters df in the relic
+    exposure = worker_object.parameters[2]
+    gain = worker_object.parameters[3]
+    trigger_mode = worker_object.parameters[4]
+    worker_object.relic_create_parameters_df(cam_index=cam_index, exposure=exposure, gain=gain, trigger_mode=trigger_mode,
+                                             get_subcamera_index=get_subcamera_index, sub_camera_scale=sub_camera_scale,
+                                             save_file=save_file, add_time_stamp=add_time_stamp, file_fps=file_fps)
+    worker_object.initialised = True
+
     counter = 0
     total_frame_time = 0
     while acquiring_on:
