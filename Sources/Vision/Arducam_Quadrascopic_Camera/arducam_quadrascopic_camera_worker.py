@@ -193,7 +193,8 @@ def run_camera(worker_object):
 
             worker_object.send_data_to_com(frame)
 
-            worker_object.relic_update_substate_df(frame_id=capture.get(cv2.CAP_PROP_POS_FRAMES))
+            worker_object.relic_update_substate_df(frame_id=capture.get(cv2.CAP_PROP_FRAME_COUNT),
+                                                   time_in_video=capture.get(cv2.CAP_PROP_POS_MSEC))
 
             total_frame_time = total_frame_time + (datetime.now() - start).total_seconds()
 
