@@ -144,22 +144,23 @@ def run_camera(worker_object):
 
             gst_out = "appsrc ! video/x-raw, format=GRAY8 ! nvvidconv ! video/x-raw(memory:NVMM) ! \
                        omxh264enc ! h264parse ! matroskamux ! filesink location={}".format(save_file)
-            #gst_out = "appsrc ! video/x-raw, format=GRAY8 ! queue ! nvvidconv ! omxh264enc ! h264parse ! qtmux ! filesink location={} ".format(file_name)
             output_video = cv2.VideoWriter(gst_out, cv2.CAP_GSTREAMER, 0, file_fps, (width, height), False)
 
         # Before changing the v4l2 driver parameters first capture a frame (otherwise the changes do not stick)
         got_frame, frame = capture.read()
         if got_frame:
             change_camera_parameters(worker_object)
-            #os.system('v4l2-ctl -l')  # send the camera parameters to the stdout
         else:
             logging.error("Arducam didn't acquire the first frame correctly. Aborting")
             print("Arducam didn't acquire the first frame correctly. Aborting")
             return
 
-    worker_object.relic_create_parameters_df(cam_index=cam_index, codec=codec, exposure=worker_object.parameters[2],
-                                             gain=worker_object.parameters[3], trigger_mode=worker_object.parameters[4],
-                                             subcamera_index=get_subcamera_index, sub_camera_scale=sub_camera_scale,
+    # Create the parameters df in the relic
+    exposure = worker_object.parameters[2]
+    gain = worker_object.parameters[3]
+    trigger_mode = worker_object.parameters[4]
+    worker_object.relic_create_parameters_df(cam_index=cam_index, exposure=exposure, gain=gain, trigger_mode=trigger_mode,
+                                             get_subcamera_index=get_subcamera_index, sub_camera_scale=sub_camera_scale,
                                              save_file=save_file, add_time_stamp=add_time_stamp, file_fps=file_fps)
 
     counter = 0
@@ -190,7 +191,7 @@ def run_camera(worker_object):
                     dst_width = sub_camera_scale * new_width
                     frame = resize(frame, dst_width)
 
-            worker_object.socket_push_data.send_array(frame, copy=False)
+            worker_object.send_data_to_com(frame)
 
             worker_object.relic_update_substate_df(frame_id=capture.get(cv2.CAP_PROP_POS_FRAMES))
 
