@@ -15,6 +15,7 @@ import cv2 as cv2
 import logging
 from Heron import general_utils as gu
 from Heron.Operations.Sources.Vision.Arducam_Quadrascopic_Camera.arducam_utilities import ArducamUtils
+from Heron.Operations.Sources.Vision.Arducam_Quadrascopic_Camera import gpio_thread
 
 acquiring_on = False
 capture: cv2.VideoCapture
@@ -28,6 +29,9 @@ save_file: str
 get_subcamera_index: int
 sub_camera_scale: float
 total_frame_time: int
+previous_ttl_counter = -1
+input_pin = 21  # BCM pin 21
+ttl_counter = 0
 
 
 def resize(frame, dst_width):
@@ -103,6 +107,10 @@ def run_camera(worker_object):
     global get_subcamera_index
     global sub_camera_scale
     global total_frame_time
+    global ttl_counter
+
+    # start the gpio thread
+    gpio_thread.running = True
 
     if not acquiring_on:  # Get the parameters from the node
         while not acquiring_on:
@@ -118,7 +126,6 @@ def run_camera(worker_object):
 
                 acquiring_on = True
                 logging.debug('Got arducam parameters. Starting capture')
-                print('Got arducam parameters. Starting capture')
             except:
                 logging.debug('Waiting to get parameters for Arducam')
                 cv2.waitKey(100)
@@ -155,23 +162,24 @@ def run_camera(worker_object):
             print("Arducam didn't acquire the first frame correctly. Aborting")
             return
 
-    # Create the parameters df in the relic
+    # Save parameters
     exposure = worker_object.parameters[2]
     gain = worker_object.parameters[3]
     trigger_mode = worker_object.parameters[4]
-    worker_object.num_of_iters_to_update_relics_substate = -1
-    worker_object.relic_create_parameters_df(cam_index=cam_index, exposure=exposure, gain=gain, trigger_mode=trigger_mode,
+
+    worker_object.savenodestate_create_parameters_df(cam_index=cam_index, exposure=exposure, gain=gain, trigger_mode=trigger_mode,
                                              get_subcamera_index=get_subcamera_index, sub_camera_scale=sub_camera_scale,
                                              save_file=save_file, add_time_stamp=add_time_stamp, file_fps=file_fps)
 
     counter = 0
     total_frame_time = 0
+    start = datetime.now()
     while acquiring_on:
 
-        start = datetime.now()
         got_frame, frame = capture.read()
         if got_frame:
-
+            ttl_counter = gpio_thread.ttl_counter
+            ttl_time = gpio_thread.ttl_time
             counter += 1
 
             frame = arducam_utils.convert(frame)
@@ -194,9 +202,11 @@ def run_camera(worker_object):
 
             worker_object.send_data_to_com(frame)
 
-            worker_object.relic_update_substate_df(time_in_video=capture.get(cv2.CAP_PROP_POS_MSEC))
+            worker_object.savenodestate_update_substate_df(time_of_frame=(datetime.now() - start).total_seconds(),
+                                                           ttl_pulse_count=ttl_counter,
+                                                           ttl_pulse_time=ttl_time)
+            start = datetime.now()
 
-            total_frame_time = total_frame_time + (datetime.now() - start).total_seconds()
 
 
 def on_end_of_life():
@@ -206,15 +216,20 @@ def on_end_of_life():
     global counter
     global acquiring_on
 
-    avgtime = total_frame_time / counter
-    logging.debug("Average time between frames: " + str(avgtime))
-    logging.debug("Average FPS: " + str(1 / avgtime))
+    gpio_thread.running = 0
+
+    try:
+        avgtime = total_frame_time / counter
+        logging.debug("Average time between frames: " + str(avgtime))
+        logging.debug("Average FPS: " + str(1 / avgtime))
+    except:
+        pass
 
     acquiring_on = False
     time.sleep(2)
 
-    capture.release()
     try:
+        capture.release()
         output_video.release()
     except Exception as e:
         logging.debug(e)
